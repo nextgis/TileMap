@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/plugins/tile_map/">
+        <file>tile_map.svg</file>
+        <file>i18n/tile_map_ru.qm</file>
+    </qresource>
+</RCC>
