@@ -9,10 +9,10 @@
 #include <QString>
 #include <QThread>
 #include <QTime>
-#include <QVector>
 
 #include <qgscoordinatetransform.h>
 #include <qgsmapcanvas.h>
+#include <qgsrectangle.h>
 
 #include "qzipwriter_p.h"
 #include "tile.h"
@@ -20,19 +20,21 @@
 class Thread : public QThread {
   Q_OBJECT
 
-  QString mName;
   QgsMapCanvas mCanvas;
-  QVector<Tile> mTiles;
-
+  const QgsRectangle mRect;
+  const int mMinZ;
+  const int mMaxZ;
+  QPixmap mPixmap;
   QFileInfo mFileInfo;
   QZipWriter mZip;
-  QPixmap mPixmap;
+
   QgsCoordinateTransform mTransform;
   bool mStop;
   qint64 mTotal;
   qint64 mCounter;
   QTime mTime;
 
+  void estimate(const Tile& tile);
   void render(const Tile& tile);
 
 protected:
@@ -49,7 +51,9 @@ public:
   Thread
     ( QObject* parent
     , QgsMapCanvas* ifaceCanvas
-    , const QVector<Tile>& tiles
+    , const QgsRectangle& rect
+    , int minZ
+    , int maxZ
     , int pixelsPerSide
     , const QFileInfo& fileInfo
     );

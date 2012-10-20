@@ -119,30 +119,6 @@ void Dialog::on_exportPushButton_clicked()
   const double ArctanSinhPi = -85.051128779806592377; // http://wiki.openstreetmap.org/wiki/Slippy_map_tilenames#X_and_Y
   extent = extent.intersect(&QgsRectangle(-180, -ArctanSinhPi, 180, ArctanSinhPi));
 
-  QVector<Tile> tiles;
-  const int count = int(std::pow(2., double(ui->minimumZoomSpinBox->value())));
-  for (int x(0); x < count; ++x)
-    for (int y(0); y < count; ++y)
-    {
-      Tile tile(x, y, ui->minimumZoomSpinBox->value(), ui->maximumZoomSpinBox->value());
-      if (tile.toRect().intersects(extent))
-        tiles.push_back(tile);
-    }
-  if (tiles.empty())
-  {
-    QMessageBox::critical(this, mName, ui->targetGroupBox->title() + sErrorSuffix);
-    return;
-  }
-  if (tiles.size() == 1)
-  {
-    tiles[0] = tiles[0].zoomToRect(extent);
-    if (tiles[0].maxZ < tiles[0].z)
-    {
-      QMessageBox::critical(this, mName, ui->maximumZoomLabel->text() + sErrorSuffix);
-      return;
-    }
-  }
-
   ui->exportPushButton->setEnabled(false);
   ui->stopBushButton->setEnabled(true);
   ui->progressBar->setValue(0);
@@ -158,7 +134,14 @@ void Dialog::on_exportPushButton_clicked()
   settings.setValue(QString("%1/%2").arg(mName).arg(ui->minimumZoomLabel->text()), ui->minimumZoomSpinBox->value());
   settings.setValue(QString("%1/%2").arg(mName).arg(ui->pixelsPerSideLabel->text()), ui->pixelsPerSideSpinBox->value());
 
-  mThread = new Thread(this, mCanvas, tiles, ui->pixelsPerSideSpinBox->value(), fileInfo);
+  mThread = new Thread
+    ( this
+    , mCanvas
+    , extent
+    , ui->minimumZoomSpinBox->value()
+    , ui->maximumZoomSpinBox->value()
+    , ui->pixelsPerSideSpinBox->value()
+    , fileInfo);
   connect(mThread, SIGNAL(signalProcess(QString, int)), this, SLOT(on_process(QString, int)));
   connect(mThread, SIGNAL(signalFinish()), this, SLOT(on_finish()));
   connect(this, SIGNAL(signalStop()), mThread, SLOT(on_stop()));

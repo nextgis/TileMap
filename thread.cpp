@@ -16,15 +16,19 @@ static const QString sRoot = QObject::tr("Mapnik");
 Thread::Thread
   ( QObject* parent
   , QgsMapCanvas* ifaceCanvas
-  , const QVector<Tile>& tiles
+  , const QgsRectangle& rect
+  , int minZ
+  , int maxZ
   , int pixelsPerSide
   , const QFileInfo& fileInfo
   )
   : QThread(parent)
-  , mTiles(tiles)
+  , mRect(rect)
+  , mMinZ(minZ)
+  , mMaxZ(maxZ)
+  , mPixmap(pixelsPerSide, pixelsPerSide)
   , mFileInfo(fileInfo)
   , mZip(fileInfo.isDir()? QString(): fileInfo.absoluteFilePath())
-  , mPixmap(pixelsPerSide, pixelsPerSide)
   , mStop(false)
   , mTotal(0)
   , mCounter(0)
@@ -47,46 +51,65 @@ Thread::Thread
   renderer->setOutputSize(mPixmap.size(), mPixmap.logicalDpiX());
   renderer->setDestinationCrs(mercator);
   renderer->setProjectionsEnabled(true);
+}
 
-  for (int t(0); t < mTiles.size(); ++t)
-    for (int z(0); z <= (mTiles[t].maxZ - mTiles[t].z); ++z)
-      mTotal += qint64(std::pow(2., double(2 * z)));
+void Thread::estimate(const Tile& tile)
+{
+  if (mStop || !mRect.intersects(tile.toRect()))
+    return;
+
+  if (mMinZ <= tile.z && tile.z <= mMaxZ)
+    ++mTotal;
+
+  if (mTime.elapsed() > 1000)
+  {
+    emit signalProcess(QString(tr("Counting tiles: %1")).arg(mTotal), 0);
+    mTime.restart();
+  }
+
+  // in-depth recursion
+  if (tile.z < mMaxZ)
+    for (int x(2 * tile.x); x <= (2 * tile.x + 1); ++x)
+      for (int y(2 * tile.y); y <= (2 * tile.y + 1); ++y)
+      {
+        Tile subTile(x, y, tile.z + 1);
+        estimate(subTile);
+      }
 }
 
 void Thread::render(const Tile& tile)
 {
-  if (mStop)
+  const QgsRectangle rect(tile.toRect());
+  if (mStop || !mRect.intersects(rect))
     return;
 
-  // draw
+  if (mMinZ <= tile.z && tile.z <= mMaxZ)
   {
-  mCanvas.mapRenderer()->setExtent( mTransform.transform( tile.toRect() ) );
-  mCanvas.refresh();
-  mPixmap.fill();
-  QPainter painter;
-  painter.begin(&mPixmap);
-  mCanvas.mapRenderer()->render( &painter );
-  painter.end();
+    mCanvas.mapRenderer()->setExtent( mTransform.transform( rect ) );
+    mCanvas.refresh();
+    mPixmap.fill();
+    QPainter painter;
+    painter.begin(&mPixmap);
+    mCanvas.mapRenderer()->render( &painter );
+    painter.end();
+
+    const QString path(QString("%1/%2/%3").arg(sRoot).arg(tile.z).arg(tile.x));
+    if (mFileInfo.isDir())
+    {
+      QDir().mkpath(QString("%1/%2").arg(mFileInfo.absoluteFilePath()).arg(path));
+      mPixmap.save(QString("%1/%2/%3.png").arg(mFileInfo.absoluteFilePath()).arg(path).arg(tile.y), "PNG");
+    }
+    else
+    {
+      QByteArray bytes;
+      QBuffer buffer(&bytes);
+      buffer.open(QIODevice::WriteOnly);
+      mPixmap.save(&buffer, "PNG");
+      mZip.addDirectory(path);
+      mZip.addFile(QString("%1/%2.png").arg(path).arg(tile.y), bytes);
+    }
   }
 
-  // save
-  const QString path(QString("%1/%2/%3").arg(sRoot).arg(tile.z).arg(tile.x));
-  if (mFileInfo.isDir())
-  {
-    QDir().mkpath(QString("%1/%2").arg(mFileInfo.absoluteFilePath()).arg(path));
-    mPixmap.save(QString("%1/%2/%3.png").arg(mFileInfo.absoluteFilePath()).arg(path).arg(tile.y), "PNG");
-  }
-  else
-  {
-    QByteArray bytes;
-    QBuffer buffer(&bytes);
-    buffer.open(QIODevice::WriteOnly);
-    mPixmap.save(&buffer, "PNG");
-    mZip.addDirectory(path);
-    mZip.addFile(QString("%1/%2.png").arg(path).arg(tile.y), bytes);
-  }
-
-  // progress
   ++mCounter;
   if (mTime.elapsed() > 1000)
   {
@@ -95,11 +118,11 @@ void Thread::render(const Tile& tile)
   }
 
   // in-depth recursion
-  if (tile.z < tile.maxZ)
+  if (tile.z < mMaxZ)
     for (int x(2 * tile.x); x <= (2 * tile.x + 1); ++x)
       for (int y(2 * tile.y); y <= (2 * tile.y + 1); ++y)
       {
-        Tile subTile(x, y, tile.z + 1, tile.maxZ);
+        Tile subTile(x, y, tile.z + 1);
         render(subTile);
       }
 }
@@ -132,8 +155,10 @@ void Thread::run()
   mTime.start();
   if (!mFileInfo.isDir() || removeDir(QString("%1/%2").arg(mFileInfo.absoluteFilePath()).arg(sRoot)))
   {
-    for (int t(0); t < mTiles.size(); ++t)
-      render(mTiles[t]);
+    mCounter = 0;
+    mTotal = 0;
+    estimate(Tile());
+    render(Tile());
     emit signalProcess(tr("Done"), 100);
   }
   emit signalFinish();

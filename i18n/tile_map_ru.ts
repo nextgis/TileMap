@@ -123,7 +123,7 @@
         <translation></translation>
     </message>
     <message>
-        <location filename="../plugin.cpp" line="12"/>
+        <location filename="../plugin.cpp" line="14"/>
         <source>Tile map</source>
         <translation></translation>
     </message>
@@ -136,12 +136,17 @@
 <context>
     <name>Thread</name>
     <message>
-        <location filename="../thread.cpp" line="93"/>
+        <location filename="../thread.cpp" line="116"/>
         <source>Tiles: %1 of %2</source>
         <translation>Тайл: %1 из %2</translation>
     </message>
     <message>
-        <location filename="../thread.cpp" line="137"/>
+        <location filename="../thread.cpp" line="66"/>
+        <source>Counting tiles: %1</source>
+        <translation>Подсчет тайлов: %1</translation>
+    </message>
+    <message>
+        <location filename="../thread.cpp" line="162"/>
         <source>Done</source>
         <translation>Готово</translation>
     </message>
